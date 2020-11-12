@@ -17,7 +17,7 @@ To install requirements
 
 ```
 python3 tiiramuunnin.py --help
-python3 tiirarmuunnin.py -f tiira.csv -o valmis.csv
+python3 tiiramuunnin.py -f tiira.csv -o valmis.csv
 ```
 
 
