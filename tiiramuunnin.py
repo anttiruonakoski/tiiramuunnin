@@ -1,4 +1,7 @@
 __doc__ = "Convert tiira.fi CSV file into different formats"
+__doc_fi__ = (
+    "Muuntaa tiira.fi havaintopalvelusta ladatun CSV-tiedoston eri formaatteihin"
+)
 __author__ = "Antti Ruonakoski"
 __copyright__ = "Copyright 2020"
 __license__ = "MIT"
@@ -16,6 +19,9 @@ from pyproj import Transformer
 pd.options.mode.chained_assignment = None
 float_format = "%.10f"
 pd.options.display.float_format = "{:,.10f}".format
+
+default_infile = "tiira.csv"
+default_outfile = "tiira_muunnettu.csv"
 
 
 def finnish_date_converter(date):
@@ -50,7 +56,11 @@ def read_csv(csv_file="tiira.csv"):
 
 
 def convert_geographical(df: pd.DataFrame):
-    """Muunnetaan ETRSTM-35-FIN tasokoordinaatit maantieteellisiksi koordinaateiksi, päiväys ISO-8601 muotoon ja poistetaan useita kenttiä"""
+
+    """Muuntaa ETRSTM-35-FIN tasokoordinaatit maantieteellisiksi koordinaateiksi ja havainnon alkupäiväyksen ISO-8601 muotoon. Poistaa useita kenttiä. Seuraavat säilytetään:
+    "Laji", "Pvm1", "Kunta", "Paikka", "X-koord", "Y-koord", "rivityyppi", "rivejä".
+    """
+
     from_proj = "epsg:3067"  # ETRS-TM35FIN
     to_proj = "epsg:4326"  # WGS-84
     transformer = Transformer.from_crs(from_proj, to_proj)
@@ -90,14 +100,14 @@ def write_csv(df: pd.DataFrame, filename: str, encoding="utf-8"):
             sep=separator,
             float_format=float_format,
         )
-    except IOError as e:
+    except IOError:
         print("Tallennus epäonnistui.")
 
 
 if __name__ == "__main__":
     do_conversion = []
     conversions = {
-        "maantieteelliset koordinaatit": convert_geographical,
+        "maantieteelliset_koordinaatit": convert_geographical,
     }
 
     # argparse ei tosin välitä newlineista,
@@ -105,51 +115,62 @@ if __name__ == "__main__":
     for k, v in conversions.items():
         epilog += f"{k} : {v.__doc__} \n"
     parser = argparse.ArgumentParser(
-        description=__doc__,
+        description=__doc_fi__,
         epilog=epilog,
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
 
     parser.add_argument(
         "-f",
-        "--in-file",
+        "--input-file",
         type=str,
-        help="Input file name (default tiira.csv)",
+        help=f"Lähtötiedoston nimi (oletus: {default_infile})",
         dest="filename",
-        default="tiira.csv",
+        metavar="lähtötiedosto",
+        default=default_infile,
     )
     parser.add_argument(
         "-o",
-        "--out-file",
+        "--output-file",
         type=str,
-        help="Output file name (default tiira_muunnettu.csv)",
+        default=default_outfile,
+        help=f"Muunnetun tiedoston nimi (oletus: {default_outfile})",
+        metavar="muunnettu tiedosto",
         dest="outfilename",
-        default="tiira_muunnettu.csv",
     )
     parser.add_argument(
         "-t",
         "--type",
-        help="Conversion type (default maantieteelliset koordinaatit)",
+        metavar="muunnostyyppi",
+        help="Muunnostyyppi (oletus maantieteelliset_koordinaatit). \n \
+            Voit antaa useita muunnostyyppejä.",
         action="append",
-        dest="do_conversion",
-        default="maantieteelliset koordinaatit",
+        dest="conversion_types",
+        default=[],
     )
     args = parser.parse_args()
 
-    if not do_conversion:
-        do_conversion.append("maantieteelliset koordinaatit")
     # print(args)
-    conversion = do_conversion[0]
+    if not args.conversion_types:
+        args.conversion_types.append("maantieteelliset_koordinaatit")
 
     try:
         df, encoding = read_csv(args.filename)
-    except IOError as e:
+    except IOError:
         print(
             f"{args.filename} : virhe tiedoston avaamisessa, tarkista tiedoston sijainti."
         )
         sys.exit(1)
 
-    print(f"Suoritetaan muunnos : {conversion}.")
-    result = conversions[conversion](df)
-    write_csv(result, args.outfilename, encoding)
-    print(f"{args.outfilename} : muunnettu tiedosto valmis.")
+    for conversion in args.conversion_types:
+        try:
+            filename = str(args.outfilename).split(".")
+            filename.insert(1, f"_{conversion}.")
+            filename = ("").join(filename)
+            result = conversions[conversion](df)
+            print(f"Suoritetaan muunnos : {conversion}.")
+            write_csv(result, filename, encoding)
+            print(f"{filename} : muunnettu tiedosto valmis.")
+        except KeyError:
+            print(f"Virheellinen muunnostyyppi {conversion}.")
+       
